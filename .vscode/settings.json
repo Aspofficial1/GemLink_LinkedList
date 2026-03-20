@@ -1,0 +1,9 @@
+{
+    "java.project.sourcePaths": [
+        "gem-origin-tracker\\src"
+    ],
+    "java.project.referencedLibraries": [
+        "lib\\javase-3.5.2.jar",
+        "lib\\core-3.5.2.jar"
+    ]
+}
