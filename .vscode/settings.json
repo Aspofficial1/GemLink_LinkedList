@@ -3,6 +3,19 @@
         "gem-origin-tracker/src"
     ],
     "java.project.referencedLibraries": [
-        "lib/**/*.jar"
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/core-3.5.2.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/gson-2.10.1.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/javase-3.5.2.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/javax.servlet-api-3.1.0.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-http-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-io-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-server-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-servlet-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-util-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/jetty-webapp-9.4.51.v20230217.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/slf4j-api-2.0.9.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/slf4j-simple-2.0.9.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/spark-core-2.9.4.jar",
+        "C:/Users/Abhishake/OneDrive/Desktop/PDSA_Project/Project/Gem_Java_Project/lib/sqlite-jdbc-3.45.1.0.jar"
     ]
 }
