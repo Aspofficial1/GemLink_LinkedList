@@ -1,5 +1,4 @@
 package model;
-
 /**
  * GemStage defines the possible stages in a gemstone's journey.
  * Using an enum here ensures only valid stage types can be assigned

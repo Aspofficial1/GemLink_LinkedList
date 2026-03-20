@@ -1,11 +1,10 @@
 package service;
 
 import database.DBConnection;
+import java.util.List;
 import model.GemLinkedList;
 import model.GemNode;
 import model.GemStage;
-
-import java.util.List;
 
 /**
  * OriginVerifier is responsible for verifying whether a gemstone

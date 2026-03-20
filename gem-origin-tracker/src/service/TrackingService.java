@@ -1,28 +1,33 @@
 package service;
 
 import database.DBConnection;
-import model.GemLinkedList;
-import model.GemNode;
-import model.GemStage;
-
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import model.GemLinkedList;
+import model.GemNode;
+import model.GemStage;
 
 /**
  * TrackingService is the main business logic layer of the application.
- * It acts as the bridge between the UI layer and the data layer,
- * coordinating operations between GemLinkedList and DBConnection.
+ * It acts as the bridge between the UI layer, the API handler layer,
+ * and the data layer, coordinating operations between GemLinkedList
+ * and DBConnection.
  *
  * All gem registration, stage addition, journey retrieval, and
- * search operations go through this class. The UI never talks
- * directly to the database or the linked list - it always goes
- * through TrackingService to keep the code organised and testable.
+ * search operations go through this class. Neither the UI nor the
+ * API handlers talk directly to the database or the linked list.
+ * They always go through TrackingService to keep the code organised
+ * and testable.
  *
  * An in-memory map is used to store all active gem linked lists
  * so we do not reload from the database on every single operation.
+ *
+ * No logic has been changed from the original CLI version.
+ * This class now serves both the CLI MainMenu and the REST API
+ * handler classes — both layers call the exact same methods.
  */
 public class TrackingService {
 
@@ -72,20 +77,22 @@ public class TrackingService {
      * It creates the first node (MINING stage), builds the linked list,
      * and saves both the gem record and the mining stage to the database.
      *
+     * Called by both GemForm (CLI) and GemHandler (REST API).
+     *
      * A unique gem ID is generated automatically based on the current
      * timestamp to ensure no two gems share the same ID.
      *
-     * @param gemType         the type of gem e.g. Blue Sapphire
+     * @param gemType          the type of gem e.g. Blue Sapphire
      * @param colorDescription hue, tone and saturation details
-     * @param originMine      name of the mine where gem was found
-     * @param district        district of the mine
-     * @param village         village near the mine
-     * @param minerName       full name of the miner
-     * @param minerIdNumber   NIC number of the miner
-     * @param minerContact    contact number of the miner
-     * @param weightInCarats  original weight at time of discovery
-     * @param priceInRupees   initial estimated value in rupees
-     * @param miningDate      date the gem was extracted
+     * @param originMine       name of the mine where gem was found
+     * @param district         district of the mine
+     * @param village          village near the mine
+     * @param minerName        full name of the miner
+     * @param minerIdNumber    NIC number of the miner
+     * @param minerContact     contact number of the miner
+     * @param weightInCarats   original weight at time of discovery
+     * @param priceInRupees    initial estimated value in rupees
+     * @param miningDate       date the gem was extracted
      * @return the newly created GemLinkedList, or null if registration failed
      */
     public GemLinkedList registerNewGem(
@@ -124,23 +131,27 @@ public class TrackingService {
         // Set optional fields on the mining node
         miningNode.setPersonIdNumber(minerIdNumber);
         miningNode.setContactNumber(minerContact);
-        miningNode.setNotes("Origin mine: " + originMine + " | District: " + district);
+        miningNode.setNotes("Origin mine: " + originMine
+                + " | District: " + district);
 
         // Create the linked list and add the mining node as the head
         GemLinkedList list = new GemLinkedList(gemId);
         list.addStage(miningNode);
 
         // Save the gem record to the database
-        boolean gemSaved = db.saveGem(list, colorDescription, originMine, district, village);
+        boolean gemSaved = db.saveGem(
+                list, colorDescription, originMine, district, village);
         if (!gemSaved) {
-            System.out.println("Failed to register gem. Database error on gem save.");
+            System.out.println("Failed to register gem."
+                    + " Database error on gem save.");
             return null;
         }
 
         // Save the mining stage node to the database
         boolean stageSaved = db.saveStage(miningNode, 1);
         if (!stageSaved) {
-            System.out.println("Failed to save mining stage. Rolling back gem registration.");
+            System.out.println("Failed to save mining stage."
+                    + " Rolling back gem registration.");
             db.deleteGem(gemId);
             return null;
         }
@@ -148,7 +159,8 @@ public class TrackingService {
         // Store the list in the in-memory map for immediate use
         activeGems.put(gemId, list);
 
-        System.out.println("💎 New gem registered successfully. Gem ID: " + gemId);
+        System.out.println("💎 New gem registered successfully."
+                + " Gem ID: " + gemId);
         return list;
     }
 
@@ -161,6 +173,8 @@ public class TrackingService {
      * Called each time the gem changes hands or undergoes processing.
      * Creates a new node, appends it to the linked list, and saves
      * the stage to the database.
+     *
+     * Called by both GemForm (CLI) and StageHandler (REST API).
      *
      * @param gemId          the ID of the gem to update
      * @param stage          the type of stage being added
@@ -214,7 +228,8 @@ public class TrackingService {
         // Stage order equals the current size of the list after adding
         boolean saved = db.saveStage(newNode, list.getSize());
         if (!saved) {
-            System.out.println("Failed to save stage to database. Removing from list.");
+            System.out.println("Failed to save stage to database."
+                    + " Removing from list.");
             list.removeStageAt(list.getSize() - 1);
             return null;
         }
@@ -229,20 +244,25 @@ public class TrackingService {
      * Called after addStageToGem when the stage type is EXPORTING,
      * to attach the additional flight, invoice, and destination data.
      *
-     * @param gemId             the ID of the gem being exported
-     * @param flightNumber      the flight number for the export
-     * @param invoiceNumber     the invoice number for customs
+     * Called by both GemForm (CLI) and StageHandler (REST API).
+     *
+     * @param gemId              the ID of the gem being exported
+     * @param flightNumber       the flight number for the export
+     * @param invoiceNumber      the invoice number for customs
      * @param destinationCountry the country where the gem is going
      * @return true if the export details were set successfully
      */
-    public boolean addExportDetails(String gemId, String flightNumber,
-                                    String invoiceNumber, String destinationCountry) {
+    public boolean addExportDetails(String gemId,
+                                     String flightNumber,
+                                     String invoiceNumber,
+                                     String destinationCountry) {
         GemLinkedList list = getGemList(gemId);
         if (list == null) return false;
 
         // The current tail should be the EXPORTING node just added
         GemNode exportNode = list.getCurrentStageNode();
-        if (exportNode == null || exportNode.getStage() != GemStage.EXPORTING) {
+        if (exportNode == null
+                || exportNode.getStage() != GemStage.EXPORTING) {
             System.out.println("The latest stage is not an EXPORTING stage.");
             return false;
         }
@@ -260,9 +280,11 @@ public class TrackingService {
      * Called when a gem receives official certification,
      * typically at the TRADING or EXPORTING stage.
      *
-     * @param gemId               the ID of the gem
-     * @param certificateNumber   the certificate number issued
-     * @param issuingAuthority    the name of the certifying body
+     * Called by both GemForm (CLI) and StageHandler (REST API).
+     *
+     * @param gemId             the ID of the gem
+     * @param certificateNumber the certificate number issued
+     * @param issuingAuthority  the name of the certifying body
      * @return true if the certificate details were set successfully
      */
     public boolean addCertificateDetails(String gemId,
@@ -289,6 +311,8 @@ public class TrackingService {
      * Notes provide additional context that does not fit
      * into the standard fields of a stage.
      *
+     * Called by both GemForm (CLI) and StageHandler (REST API).
+     *
      * @param gemId the ID of the gem
      * @param note  the note text to add
      * @return true if the note was set successfully
@@ -314,6 +338,8 @@ public class TrackingService {
      * Used by authorised users to correct wrongly entered stage data.
      * Also removes the corresponding record from the database and
      * re-saves all remaining stages with corrected order numbers.
+     *
+     * Called by both JourneyViewer (CLI) and StageHandler (REST API).
      *
      * @param gemId    the ID of the gem
      * @param position the index of the stage to remove (0-based)
@@ -349,6 +375,8 @@ public class TrackingService {
      * First checks the in-memory map, then falls back to the database
      * if the gem is not currently loaded in memory.
      *
+     * Called by all CLI screens and all REST API handlers.
+     *
      * @param gemId the ID of the gem to retrieve
      * @return the GemLinkedList for the gem, or null if not found
      */
@@ -369,7 +397,7 @@ public class TrackingService {
     /**
      * Displays the full forward journey of a gem to the console.
      * Traverses from the mining node to the current owner node.
-     * Used by JourneyViewer when a user wants to see a gem's history.
+     * Used by JourneyViewer (CLI) when a user wants to see a gem's history.
      *
      * @param gemId the ID of the gem to display
      */
@@ -401,7 +429,7 @@ public class TrackingService {
     /**
      * Displays a short summary of a gem's journey.
      * Shows key details without printing every stage in full.
-     * Used in search results and listing screens.
+     * Used in search results and listing screens in CLI mode.
      *
      * @param gemId the ID of the gem to summarise
      */
@@ -444,6 +472,7 @@ public class TrackingService {
     /**
      * Returns all stage nodes for a gem as a flat list.
      * Used by ReportGenerator to compile the full journey into a report.
+     * Also used by StatsHandler and VerificationHandler in API mode.
      *
      * @param gemId the ID of the gem
      * @return a List of all GemNode objects in chronological order
@@ -461,6 +490,7 @@ public class TrackingService {
     /**
      * Returns all gem IDs currently registered in the system.
      * Queries the database to include gems not currently in memory.
+     * Called by both CLI screens and API handlers.
      *
      * @return a List of all gem ID strings
      */
@@ -471,6 +501,7 @@ public class TrackingService {
     /**
      * Searches for gems by their type.
      * Returns all gem IDs that match the given type string.
+     * Called by both MainMenu (CLI) and GemHandler (REST API).
      *
      * @param gemType the gem type to search for
      * @return a List of matching gem ID strings
@@ -482,6 +513,7 @@ public class TrackingService {
     /**
      * Searches for gems by their origin district.
      * Returns all gem IDs from mines in the given district.
+     * Called by both MainMenu (CLI) and GemHandler (REST API).
      *
      * @param district the district name to search for
      * @return a List of matching gem ID strings
@@ -512,7 +544,8 @@ public class TrackingService {
      * @param certificateNumber the certificate number to find
      * @return the matching GemNode, or null if not found
      */
-    public GemNode searchStageByCertificate(String gemId, String certificateNumber) {
+    public GemNode searchStageByCertificate(String gemId,
+                                              String certificateNumber) {
         GemLinkedList list = getGemList(gemId);
         if (list == null) return null;
         return list.findByCertificateNumber(certificateNumber);
@@ -521,6 +554,7 @@ public class TrackingService {
     /**
      * Returns all gem IDs that have been verified as genuine Ceylon gems.
      * Used in the dashboard to show authenticated gems.
+     * Called by both MainMenu (CLI) and GemHandler (REST API).
      *
      * @return a List of verified Ceylon gem IDs
      */
@@ -534,7 +568,7 @@ public class TrackingService {
 
     /**
      * Returns the total number of gems registered in the system.
-     * Used in the statistics dashboard.
+     * Used in the statistics dashboard in both CLI and API modes.
      *
      * @return total gem count
      */
@@ -544,7 +578,7 @@ public class TrackingService {
 
     /**
      * Returns the number of verified Ceylon gems.
-     * Used in the statistics dashboard.
+     * Used in the statistics dashboard in both CLI and API modes.
      *
      * @return Ceylon gem count
      */
@@ -554,7 +588,7 @@ public class TrackingService {
 
     /**
      * Returns the number of unresolved fraud alerts.
-     * Used in the statistics dashboard to flag pending issues.
+     * Used in the statistics dashboard in both CLI and API modes.
      *
      * @return unresolved alert count
      */
@@ -565,6 +599,7 @@ public class TrackingService {
     /**
      * Returns all unresolved alert messages.
      * Used in the dashboard to display pending fraud warnings.
+     * Called by both MainMenu (CLI) and AlertHandler (REST API).
      *
      * @return a List of unresolved alert message strings
      */
@@ -575,6 +610,7 @@ public class TrackingService {
     /**
      * Calculates and displays the weight loss for a specific gem.
      * Shows original weight, current weight, and percentage lost.
+     * Used by JourneyViewer (CLI) and StatsHandler (REST API).
      *
      * @param gemId the ID of the gem to analyse
      */
@@ -608,6 +644,7 @@ public class TrackingService {
      * Calculates and displays the price appreciation for a specific gem.
      * Shows price at each stage from mining to current owner.
      * This is the Price Appreciation Tracker novel feature.
+     * Used by JourneyViewer (CLI) and StatsHandler (REST API).
      *
      * @param gemId the ID of the gem to analyse
      */
@@ -634,7 +671,8 @@ public class TrackingService {
             if (i > 0) {
                 double increase = node.getPriceInRupees()
                         - stages.get(i - 1).getPriceInRupees();
-                System.out.printf("             Value added at this stage      : Rs. %,.2f%n",
+                System.out.printf(
+                        "             Value added at this stage : Rs. %,.2f%n",
                         increase);
             }
         }
@@ -652,6 +690,7 @@ public class TrackingService {
      * Loads all gem journeys from the database into the in-memory map.
      * Called once when TrackingService is first created, so all gems
      * are available immediately without waiting for a user search.
+     * Works the same in both CLI mode and API server mode.
      */
     private void loadAllGemsFromDatabase() {
         List<String> allIds = db.getAllGemIds();
@@ -668,6 +707,7 @@ public class TrackingService {
     /**
      * Reloads a specific gem's journey from the database.
      * Used to refresh the in-memory data after an external update.
+     * Can be called from both CLI and API layers.
      *
      * @param gemId the ID of the gem to reload
      */
@@ -687,6 +727,7 @@ public class TrackingService {
      * Deletes a gem and all its stages from the system.
      * Removes the gem from both the in-memory map and the database.
      * Should only be called by authorised administrators.
+     * Called by both CLI and GemHandler (REST API).
      *
      * @param gemId the ID of the gem to delete
      * @return true if deleted successfully, false otherwise
@@ -734,6 +775,7 @@ public class TrackingService {
      * Returns the in-memory map of all active gem linked lists.
      * Used by the UI layer to display all loaded gems at once
      * without querying the database again.
+     * Also available to API handlers that need direct map access.
      *
      * @return the Map of gemId to GemLinkedList
      */
