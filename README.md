@@ -218,6 +218,6 @@ The system uses SQLite with a single file `gem_tracker.db` at the project root. 
 - **Institution:** National Institute of Business Management
 - **Programme:** HND Software Engineering
 - **Module:** Programming Data Structures and Algorithms
-- **Coursework:** CW1 — Group Project (2 members)
+- **Coursework:** CW1 — Group Project (@Abhishek Sandeep[kuhdse251f-026], @Piyusha Wedanda[kuhdse251f-005])
 - **Data Structure:** Doubly Linked List
 - **Submission:** GitHub link on LMS + Reflective Report PDF on LMS
