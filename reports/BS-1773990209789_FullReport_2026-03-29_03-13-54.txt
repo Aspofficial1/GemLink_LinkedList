@@ -1,0 +1,148 @@
+  +---------------------------------------------------------------------------+
+  |                 NATIONAL INSTITUTE OF BUSINESS MANAGEMENT                 |
+  |                    SCHOOL OF COMPUTING AND ENGINEERING                    |
+  |                         HND SOFTWARE ENGINEERING                          |
+  |                                                                           |
+  |                        GEM ORIGIN TRACKING SYSTEM                         |
+  |                          FULL GEM JOURNEY REPORT                          |
+  |                                                                           |
+  |                        Gem ID   : BS-1773990209789                        |
+  |                    Generated: 29 March 2026, 03:13:54                     |
+  +---------------------------------------------------------------------------+
+
+
+  ===========================================================================
+  GEM OVERVIEW
+  ===========================================================================
+
+  Gem ID : BS-1773990209789
+  Gem Type : Blue Sapphire
+  Origin Mine : Ratnapura, Pelmadulla
+  Mined On : 2025-01-15
+  Miner : Sumith Perera
+  Original Weight : 5.2000 carats
+  Mining Price : Rs. 50,000.00
+
+  Current Stage : Exporting Stage
+  Current Owner : Exporters Lanka Pvt Ltd
+  Current Location : Katunayake Airport
+  Current Weight : 4.8000 carats
+  Current Price : Rs. 850,000.00
+  Last Updated : 2025-02-01
+  Total Stages : 4
+
+
+  ===========================================================================
+  FULL JOURNEY - STAGE BY STAGE
+  ===========================================================================
+
+  ---------------------------------------------------------------------------
+  STAGE 1 OF 4  --  MINING STAGE
+  ---------------------------------------------------------------------------
+  Stage Type : Mining Stage
+  Location : Ratnapura, Pelmadulla
+  Person : Sumith Perera
+  Date : 2025-01-15
+  Weight : 5.2000 carats
+  Price : Rs. 50,000.00
+  NIC / Passport : 199012345678
+  Contact : 0771234567
+  Notes : Origin mine: Pelmadulla Mine | District: Ratnapura
+
+                                       |
+                                       v  (next node in linked list)
+
+  ---------------------------------------------------------------------------
+  STAGE 2 OF 4  --  CUTTING AND POLISHING STAGE
+  ---------------------------------------------------------------------------
+  Stage Type : Cutting and Polishing Stage
+  Location : Beruwala, Gem Street
+  Person : Mohammed Cassim
+  Date : 2025-01-20
+  Weight : 4.8000 carats
+  Price : Rs. 150,000.00
+  NIC / Passport : 198756781234
+  Contact : 0712345678
+
+                                       |
+                                       v  (next node in linked list)
+
+  ---------------------------------------------------------------------------
+  STAGE 3 OF 4  --  TRADING STAGE
+  ---------------------------------------------------------------------------
+  Stage Type : Trading Stage
+  Location : Colombo Gem Bureau
+  Person : Nimal Fernando
+  Date : 2025-01-25
+  Weight : 4.8000 carats
+  Price : Rs. 350,000.00
+  NIC / Passport : 197823456789
+  Contact : 0723456789
+
+                                       |
+                                       v  (next node in linked list)
+
+  ---------------------------------------------------------------------------
+  STAGE 4 OF 4  --  EXPORTING STAGE
+  ---------------------------------------------------------------------------
+  Stage Type : Exporting Stage
+  Location : Katunayake Airport
+  Person : Exporters Lanka Pvt Ltd
+  Date : 2025-02-01
+  Weight : 4.8000 carats
+  Price : Rs. 850,000.00
+  NIC / Passport : BR-12345
+  Contact : 0112345678
+
+
+  ===========================================================================
+  WEIGHT ANALYSIS
+  ===========================================================================
+
+  Original Weight : 5.2000 carats
+  Current Weight : 4.8000 carats
+  Total Weight Lost : 0.4000 carats
+  Weight Loss Percentage : 7.69%
+
+  Weight at each stage:
+    Stage 1 - Mining Stage : 5.2000 carats
+    Stage 2 - Cutting and Polishing Stage : 4.8000 carats
+    Stage 3 - Trading Stage : 4.8000 carats
+    Stage 4 - Exporting Stage : 4.8000 carats
+
+
+  ===========================================================================
+  PRICE APPRECIATION ANALYSIS
+  ===========================================================================
+
+  Stage  Stage Name                    Price (Rs.)     Increase (Rs.)  Change %
+  ---------------------------------------------------------------------------
+  1      Mining Stage                  Rs. 50,000        - origin        -     
+  2      Cutting and Polishing Stage   Rs. 150,000     Rs. 100,000     200.0%  
+  3      Trading Stage                 Rs. 350,000     Rs. 200,000     133.3%  
+  4      Exporting Stage               Rs. 850,000     Rs. 500,000     142.9%  
+
+  Total Price Appreciation : Rs. 800,000.00
+  Total Appreciation Percentage : 1600.0%
+  Highest Value Added Stage : Exporting Stage at Katunayake Airport
+
+
+  ===========================================================================
+  ORIGIN VERIFICATION STATUS
+  ===========================================================================
+
+  Verification Status : VERIFIED CEYLON GEM
+  Recorded Origin : Ratnapura, Pelmadulla
+  Mining Date : 2025-01-15
+  Certificate Status : No certificate recorded for this gem
+
+  +---------------------------------------------------------------------------+
+  |                               END OF REPORT                               |
+  |                                                                           |
+  |                     This report was generated by the                      |
+  |                        Gem Origin Tracking System                         |
+  |                 National Institute of Business Management                 |
+  |                HND Software Engineering - PDSA Coursework                 |
+  |                                                                           |
+  |               Report generated on: 29 March 2026, 03:13:54                |
+  +---------------------------------------------------------------------------+

@@ -377,8 +377,10 @@ public class GemHandler {
             }
 
             // Build the response with the new gem data
+            // gemId is explicitly stored as String to prevent
+            // JavaScript number precision loss on large timestamps
             Map<String, Object> result = new HashMap<>();
-            result.put("gemId",   newList.getGemId());
+            result.put("gemId",   String.valueOf(newList.getGemId()));
             result.put("gemType", gemType);
             result.put("message", "Save this Gem ID for future operations.");
             result.put("stages",  newList.getSize());
@@ -458,6 +460,12 @@ public class GemHandler {
      * The summary includes the gem ID, type, origin, current stage,
      * weight, price, verification status, and stage count.
      *
+     * gemId is explicitly cast to String using String.valueOf() to
+     * prevent Gson from serializing it as a JSON number. Large timestamp
+     * based IDs like 1773990209789 exceed JavaScript's safe integer
+     * limit (2^53 - 1) and lose the last digits when parsed as a number
+     * in the frontend. Wrapping as String prevents this precision loss.
+     *
      * @param gemId the ID of the gem to build a summary for
      * @return a Map of key-value pairs for the gem summary, or null
      */
@@ -469,7 +477,10 @@ public class GemHandler {
         GemNode currentNode = list.getCurrentStageNode();
 
         Map<String, Object> summary = new HashMap<>();
-        summary.put("gemId",       gemId);
+
+        // Store gemId as explicit String to prevent JavaScript number
+        // precision loss — large timestamp IDs exceed Number.MAX_SAFE_INTEGER
+        summary.put("gemId",       String.valueOf(gemId));
         summary.put("totalStages", list.getSize());
         summary.put("verified",    originVerifier
                 .getVerificationStatusLabel(gemId)
@@ -484,23 +495,22 @@ public class GemHandler {
                 list.calculatePriceAppreciation());
 
         if (miningNode != null) {
-            summary.put("gemType",      miningNode.getGemType());
-            summary.put("origin",       miningNode.getLocation());
-            summary.put("miningDate",   miningNode.getStageDate().toString());
-            summary.put("miner",        miningNode.getPersonName());
+            summary.put("gemType",        miningNode.getGemType());
+            summary.put("origin",         miningNode.getLocation());
+            summary.put("miningDate",     miningNode.getStageDate().toString());
+            summary.put("miner",          miningNode.getPersonName());
             summary.put("originalWeight", miningNode.getWeightInCarats());
-            summary.put("miningPrice",  miningNode.getPriceInRupees());
+            summary.put("miningPrice",    miningNode.getPriceInRupees());
         }
 
         if (currentNode != null) {
-            summary.put("currentStage",    currentNode.getStage().name());
-            summary.put("currentStageLabel",
-                    currentNode.getStage().getLabel());
-            summary.put("currentOwner",    currentNode.getPersonName());
-            summary.put("currentLocation", currentNode.getLocation());
-            summary.put("currentWeight",   currentNode.getWeightInCarats());
-            summary.put("currentPrice",    currentNode.getPriceInRupees());
-            summary.put("lastUpdated",     currentNode.getStageDate().toString());
+            summary.put("currentStage",      currentNode.getStage().name());
+            summary.put("currentStageLabel", currentNode.getStage().getLabel());
+            summary.put("currentOwner",      currentNode.getPersonName());
+            summary.put("currentLocation",   currentNode.getLocation());
+            summary.put("currentWeight",     currentNode.getWeightInCarats());
+            summary.put("currentPrice",      currentNode.getPriceInRupees());
+            summary.put("lastUpdated",       currentNode.getStageDate().toString());
         }
 
         return summary;
@@ -524,36 +534,36 @@ public class GemHandler {
         }
 
         // Add the full stage history as an ordered list
-        List<GemNode> stages     = list.getAllStages();
+        List<GemNode> stages              = list.getAllStages();
         List<Map<String, Object>> stageList = new ArrayList<>();
 
         for (int i = 0; i < stages.size(); i++) {
             GemNode node = stages.get(i);
             Map<String, Object> stageMap = new HashMap<>();
 
-            stageMap.put("stageNumber",   i + 1);
-            stageMap.put("stageType",     node.getStage().name());
-            stageMap.put("stageLabel",    node.getStage().getLabel());
-            stageMap.put("location",      node.getLocation());
-            stageMap.put("personName",    node.getPersonName());
-            stageMap.put("date",          node.getStageDate().toString());
-            stageMap.put("weightInCarats",node.getWeightInCarats());
-            stageMap.put("priceInRupees", node.getPriceInRupees());
-            stageMap.put("isCurrent",     i == stages.size() - 1);
+            stageMap.put("stageNumber",    i + 1);
+            stageMap.put("stageType",      node.getStage().name());
+            stageMap.put("stageLabel",     node.getStage().getLabel());
+            stageMap.put("location",       node.getLocation());
+            stageMap.put("personName",     node.getPersonName());
+            stageMap.put("date",           node.getStageDate().toString());
+            stageMap.put("weightInCarats", node.getWeightInCarats());
+            stageMap.put("priceInRupees",  node.getPriceInRupees());
+            stageMap.put("isCurrent",      i == stages.size() - 1);
 
             // Add optional fields only if they are set
             if (node.getPersonIdNumber() != null)
-                stageMap.put("personIdNumber", node.getPersonIdNumber());
+                stageMap.put("personIdNumber",   node.getPersonIdNumber());
             if (node.getContactNumber() != null)
-                stageMap.put("contactNumber", node.getContactNumber());
+                stageMap.put("contactNumber",    node.getContactNumber());
             if (node.getCertificateNumber() != null)
-                stageMap.put("certificateNumber", node.getCertificateNumber());
+                stageMap.put("certificateNumber",node.getCertificateNumber());
             if (node.getIssuingAuthority() != null)
                 stageMap.put("issuingAuthority", node.getIssuingAuthority());
             if (node.getFlightNumber() != null)
-                stageMap.put("flightNumber", node.getFlightNumber());
+                stageMap.put("flightNumber",     node.getFlightNumber());
             if (node.getInvoiceNumber() != null)
-                stageMap.put("invoiceNumber", node.getInvoiceNumber());
+                stageMap.put("invoiceNumber",    node.getInvoiceNumber());
             if (node.getDestinationCountry() != null)
                 stageMap.put("destinationCountry", node.getDestinationCountry());
             if (node.getNotes() != null)
