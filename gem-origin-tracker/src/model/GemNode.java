@@ -11,6 +11,10 @@ import java.time.LocalDate;
  * A doubly linked list is used instead of a singly linked list
  * because we need to traverse backwards when generating reports
  * and verifying the chain of custody from buyer back to mine.
+ *
+ * NEW — Missing setter methods added:
+ *   setLocation(), setPersonName(), setWeightInCarats(), setStageDate()
+ *   These were required by StageHandler.updateStage() but were missing.
  */
 public class GemNode {
 
@@ -245,7 +249,7 @@ public class GemNode {
     public String getNotes() { return notes; }
 
     // ---------------------------------------------------------
-    // Setters
+    // Setters — original setters (unchanged)
     // ---------------------------------------------------------
 
     /** Sets the ID number of the person at this stage. */
@@ -291,6 +295,54 @@ public class GemNode {
     /** Updates the price at this stage, used by PriceTracker. */
     public void setPriceInRupees(double priceInRupees) {
         this.priceInRupees = priceInRupees;
+    }
+
+    // ---------------------------------------------------------
+    // Setters — NEW (were missing, caused updateStage() to fail)
+    // ---------------------------------------------------------
+
+    /**
+     * Sets the location where this stage took place.
+     * Called by StageHandler.updateStage() when the user
+     * edits the location field of an existing stage node.
+     *
+     * @param location the new location value
+     */
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    /**
+     * Sets the name of the person responsible at this stage.
+     * Called by StageHandler.updateStage() when the user
+     * edits the personName field of an existing stage node.
+     *
+     * @param personName the new person name value
+     */
+    public void setPersonName(String personName) {
+        this.personName = personName;
+    }
+
+    /**
+     * Sets the weight of the gem in carats at this stage.
+     * Called by StageHandler.updateStage() when the user
+     * edits the weightInCarats field of an existing stage node.
+     *
+     * @param weightInCarats the new weight value in carats
+     */
+    public void setWeightInCarats(double weightInCarats) {
+        this.weightInCarats = weightInCarats;
+    }
+
+    /**
+     * Sets the date on which this stage occurred.
+     * Called by StageHandler.updateStage() when the user
+     * edits the stageDate field of an existing stage node.
+     *
+     * @param stageDate the new stage date as a LocalDate
+     */
+    public void setStageDate(LocalDate stageDate) {
+        this.stageDate = stageDate;
     }
 
     // ---------------------------------------------------------
