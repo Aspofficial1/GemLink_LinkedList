@@ -28,6 +28,10 @@ import model.GemStage;
  * No logic has been changed from the original CLI version.
  * This class now serves both the CLI MainMenu and the REST API
  * handler classes — both layers call the exact same methods.
+ *
+ * NEW — updateStageInDatabase() added to support the stage update
+ * feature. Updates a single stage node in the database at the
+ * given position without affecting any other stages.
  */
 public class TrackingService {
 
@@ -364,6 +368,64 @@ public class TrackingService {
         System.out.println("💎 Stage removed at position " + position
                 + " for Gem: " + gemId);
         return removed;
+    }
+
+    // ---------------------------------------------------------
+    // Stage update — NEW
+    // ---------------------------------------------------------
+
+    /**
+     * Updates an existing stage node in the database at a specific position.
+     * Called by StageHandler.updateStage() after fields on the node have
+     * been changed in memory. This method persists those changes to the
+     * database so they survive a server restart.
+     *
+     * The update works by deleting ALL stages for the gem and re-saving
+     * them all in order — this is the same approach used by removeStage().
+     * It guarantees stage_order values stay consecutive and correct.
+     *
+     * The in-memory linked list is already updated before this method
+     * is called because StageHandler modifies the node directly via
+     * the setter methods (setLocation, setPersonName, etc.).
+     * This method only needs to sync those changes to the database.
+     *
+     * @param gemId    the ID of the gem whose stage is being updated
+     * @param position the 0-based position of the stage being updated
+     * @param node     the updated GemNode (already modified in memory)
+     * @return true if the database was updated successfully, false otherwise
+     */
+    public boolean updateStageInDatabase(String gemId,
+                                          int position,
+                                          GemNode node) {
+        GemLinkedList list = getGemList(gemId);
+        if (list == null) {
+            System.out.println("  Cannot update stage — gem not found: " + gemId);
+            return false;
+        }
+
+        // Delete all existing stage records for this gem
+        boolean deleted = db.deleteAllStages(gemId);
+        if (!deleted) {
+            System.out.println("  Failed to clear stages before update for: " + gemId);
+            return false;
+        }
+
+        // Re-save all stages in order from the in-memory linked list
+        // The node at position has already been updated in memory by
+        // StageHandler before this method was called
+        List<GemNode> allStages = list.getAllStages();
+        for (int i = 0; i < allStages.size(); i++) {
+            boolean saved = db.saveStage(allStages.get(i), i + 1);
+            if (!saved) {
+                System.out.println("  Failed to re-save stage "
+                        + (i + 1) + " after update for: " + gemId);
+                return false;
+            }
+        }
+
+        System.out.println("💎 Stage updated in database at position "
+                + position + " for Gem: " + gemId);
+        return true;
     }
 
     // ---------------------------------------------------------

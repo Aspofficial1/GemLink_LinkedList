@@ -1,13 +1,19 @@
 package api;
 
 import api.handlers.AlertHandler;
+import api.handlers.AuditHandler;
 import api.handlers.GemHandler;
+import api.handlers.JourneyMapHandler;
+import api.handlers.PriceEstimatorHandler;
 import api.handlers.QRHandler;
 import api.handlers.ReportHandler;
 import api.handlers.StageHandler;
 import api.handlers.StatsHandler;
 import api.handlers.VerificationHandler;
+import service.AuditService;
+import service.JourneyMapService;
 import service.OriginVerifier;
+import service.PriceEstimator;
 import service.PriceTracker;
 import service.QRCodeService;
 import service.TrackingService;
@@ -34,9 +40,16 @@ import static spark.Spark.internalServerError;
  * To guarantee correct order, ALL /api/gems/* GET routes are
  * registered together in registerAllGemRoutes() in the correct
  * sequence — static routes first, dynamic /:id last.
+ *
+ * NEW — AuditService is now shared across GemHandler, StageHandler,
+ * and AuditHandler so every change is recorded in one audit log.
+ * NEW — PUT /api/gems/:id/stages/:position registered for stage update.
  */
 public class ApiRouter {
 
+    // ---------------------------------------------------------
+    // Original handlers
+    // ---------------------------------------------------------
     private GemHandler          gemHandler;
     private StageHandler        stageHandler;
     private VerificationHandler verificationHandler;
@@ -45,12 +58,45 @@ public class ApiRouter {
     private QRHandler           qrHandler;
     private ReportHandler       reportHandler;
 
+    // ---------------------------------------------------------
+    // New feature handlers
+    // ---------------------------------------------------------
+
+    /**
+     * Handler for Audit Trail endpoints.
+     * Feature 1 — tracks every change made to any gem or stage.
+     */
+    private AuditHandler auditHandler;
+
+    /**
+     * Handler for Price Estimator endpoints.
+     * Feature 2 — estimates market value based on linked list data.
+     */
+    private PriceEstimatorHandler priceEstimatorHandler;
+
+    /**
+     * Handler for Journey Map endpoints.
+     * Feature 3 — converts linked list nodes into GPS map pins.
+     */
+    private JourneyMapHandler journeyMapHandler;
+
+    // ---------------------------------------------------------
+    // Constructor
+    // ---------------------------------------------------------
+
     /**
      * Creates a new ApiRouter and initialises all handler instances.
      * All service layer objects are created once here and injected
      * into each handler so they share the same service instances.
+     *
+     * AuditService is created once and shared across GemHandler,
+     * StageHandler, and AuditHandler so all changes are recorded
+     * in the same audit log using the same service instance.
      */
     public ApiRouter() {
+        // ---------------------------------------------------------
+        // Original services — unchanged
+        // ---------------------------------------------------------
         TrackingService trackingService = new TrackingService();
         OriginVerifier  originVerifier  = new OriginVerifier(trackingService);
         PriceTracker    priceTracker    = new PriceTracker(trackingService);
@@ -58,14 +104,44 @@ public class ApiRouter {
         ReportGenerator reportGenerator = new ReportGenerator(
                 trackingService, originVerifier, priceTracker);
 
-        this.gemHandler          = new GemHandler(trackingService, originVerifier);
-        this.stageHandler        = new StageHandler(trackingService);
+        // ---------------------------------------------------------
+        // AuditService — created ONCE and shared across handlers
+        // GemHandler, StageHandler, and AuditHandler all use the
+        // same instance so every change goes to the same audit log
+        // ---------------------------------------------------------
+        AuditService auditService = new AuditService(trackingService);
+
+        // ---------------------------------------------------------
+        // Updated handlers — GemHandler and StageHandler now receive
+        // auditService so they log all changes automatically
+        // ---------------------------------------------------------
+        this.gemHandler          = new GemHandler(trackingService, originVerifier, auditService);
+        this.stageHandler        = new StageHandler(trackingService, auditService);
         this.verificationHandler = new VerificationHandler(trackingService, originVerifier);
         this.alertHandler        = new AlertHandler(trackingService);
         this.statsHandler        = new StatsHandler(trackingService, originVerifier);
         this.qrHandler           = new QRHandler(qrCodeService);
         this.reportHandler       = new ReportHandler(trackingService, reportGenerator, priceTracker);
+
+        // ---------------------------------------------------------
+        // New feature handlers
+        // ---------------------------------------------------------
+
+        // Feature 1 — Audit Trail — uses the SAME auditService instance
+        this.auditHandler = new AuditHandler(auditService, trackingService);
+
+        // Feature 2 — Price Estimator
+        PriceEstimator priceEstimator = new PriceEstimator(trackingService, originVerifier);
+        this.priceEstimatorHandler = new PriceEstimatorHandler(priceEstimator, trackingService);
+
+        // Feature 3 — Journey Map
+        JourneyMapService journeyMapService = new JourneyMapService(trackingService, originVerifier);
+        this.journeyMapHandler = new JourneyMapHandler(journeyMapService, trackingService);
     }
+
+    // ---------------------------------------------------------
+    // Route registration
+    // ---------------------------------------------------------
 
     /**
      * Registers all API routes with the Spark framework.
@@ -73,13 +149,16 @@ public class ApiRouter {
      */
     public void registerRoutes() {
         registerHealthRoutes();
-        registerAllGemRoutes();     // ALL /api/gems/* in one method — order guaranteed
+        registerAllGemRoutes();         // ALL /api/gems/* in one method — order guaranteed
         registerStageRoutes();
         registerVerificationRoutes();
         registerAlertRoutes();
         registerStatsRoutes();
         registerQRRoutes();
         registerReportRoutes();
+        registerAuditRoutes();          // Feature 1 — Audit Trail
+        registerPriceEstimatorRoutes(); // Feature 2 — Price Estimator
+        registerJourneyMapRoutes();     // Feature 3 — Journey Map
         registerErrorHandlers();
 
         System.out.println("💎 All API routes registered successfully.");
@@ -96,9 +175,10 @@ public class ApiRouter {
             return ApiResponse.success("Gem Origin Tracking API is running",
                     new java.util.HashMap<String, Object>() {{
                         put("status",    "OK");
-                        put("version",   "1.0.0");
+                        put("version",   "2.0.0");
                         put("timestamp", System.currentTimeMillis());
                         put("database",  "SQLite Connected");
+                        put("features",  "Audit Trail, Price Estimator, Journey Map");
                     }}
             ).toJson();
         });
@@ -166,13 +246,31 @@ public class ApiRouter {
     // Stages
     // ---------------------------------------------------------
 
+    /**
+     * Registers all stage-related endpoints.
+     *
+     * NEW — PUT /api/gems/:id/stages/:position added for stage update.
+     * This must be registered BEFORE the current/certificate route
+     * to avoid Spark matching "current" as a position parameter.
+     */
     private void registerStageRoutes() {
         get("/api/gems/:id/stages",
                 stageHandler::getAllStages);
+
         post("/api/gems/:id/stages",
                 stageHandler::addStage);
+
+        // Update stage at position — NEW endpoint for edit/update feature
+        // Registered BEFORE current/* routes — no conflict because
+        // "current" is a static segment and :position is dynamic
+        put("/api/gems/:id/stages/:position",
+                stageHandler::updateStage);
+
         delete("/api/gems/:id/stages/:position",
                 stageHandler::removeStage);
+
+        // current/* routes — static "current" segment registered after
+        // /:position so Spark handles them correctly
         put("/api/gems/:id/stages/current/certificate",
                 stageHandler::addCertificate);
         put("/api/gems/:id/stages/current/export",
@@ -182,6 +280,7 @@ public class ApiRouter {
 
         System.out.println("  Registered: GET    /api/gems/:id/stages");
         System.out.println("  Registered: POST   /api/gems/:id/stages");
+        System.out.println("  Registered: PUT    /api/gems/:id/stages/:position");
         System.out.println("  Registered: DELETE /api/gems/:id/stages/:position");
         System.out.println("  Registered: PUT    /api/gems/:id/stages/current/certificate");
         System.out.println("  Registered: PUT    /api/gems/:id/stages/current/export");
@@ -304,6 +403,112 @@ public class ApiRouter {
     }
 
     // ---------------------------------------------------------
+    // Feature 1 — Audit Trail routes
+    // All change history for gems and stages
+    // ---------------------------------------------------------
+
+    /**
+     * Registers all audit trail endpoints.
+     *
+     * GET /api/audit                         — all audit logs
+     * GET /api/audit/summary                 — action type counts
+     * GET /api/audit/recent                  — most recent N logs
+     * GET /api/audit/gem/:gemId              — logs for one gem
+     * GET /api/audit/action/:action          — logs by action type
+     */
+    private void registerAuditRoutes() {
+        // IMPORTANT — static routes before dynamic /:gemId
+        get("/api/audit/summary",
+                auditHandler::getAuditSummary);
+        get("/api/audit/recent",
+                auditHandler::getRecentAuditLogs);
+        get("/api/audit/action/:action",
+                auditHandler::getAuditLogsByAction);
+        get("/api/audit/gem/:gemId",
+                auditHandler::getAuditLogsForGem);
+        get("/api/audit",
+                auditHandler::getAllAuditLogs);
+
+        System.out.println("  Registered: GET    /api/audit");
+        System.out.println("  Registered: GET    /api/audit/summary");
+        System.out.println("  Registered: GET    /api/audit/recent");
+        System.out.println("  Registered: GET    /api/audit/gem/:gemId");
+        System.out.println("  Registered: GET    /api/audit/action/:action");
+    }
+
+    // ---------------------------------------------------------
+    // Feature 2 — Price Estimator routes
+    // Market value estimation based on linked list data
+    // ---------------------------------------------------------
+
+    /**
+     * Registers all price estimator endpoints.
+     *
+     * GET /api/estimate/overview              — portfolio market overview
+     * GET /api/estimate/all                   — estimates for all gems
+     * GET /api/estimate/compare               — compare two gem estimates
+     * GET /api/estimate/:gemId/summary        — brief estimate for one gem
+     * GET /api/estimate/:gemId                — full estimate for one gem
+     */
+    private void registerPriceEstimatorRoutes() {
+        // IMPORTANT — static routes before dynamic /:gemId
+        get("/api/estimate/overview",
+                priceEstimatorHandler::getMarketOverview);
+        get("/api/estimate/all",
+                priceEstimatorHandler::getAllEstimates);
+        get("/api/estimate/compare",
+                priceEstimatorHandler::compareEstimates);
+        get("/api/estimate/:gemId/summary",
+                priceEstimatorHandler::getEstimateSummaryForGem);
+        get("/api/estimate/:gemId",
+                priceEstimatorHandler::getEstimateForGem);
+
+        System.out.println("  Registered: GET    /api/estimate/overview");
+        System.out.println("  Registered: GET    /api/estimate/all");
+        System.out.println("  Registered: GET    /api/estimate/compare");
+        System.out.println("  Registered: GET    /api/estimate/:gemId/summary");
+        System.out.println("  Registered: GET    /api/estimate/:gemId");
+    }
+
+    // ---------------------------------------------------------
+    // Feature 3 — Journey Map routes
+    // GPS coordinate map data from linked list traversal
+    // ---------------------------------------------------------
+
+    /**
+     * Registers all journey map endpoints.
+     *
+     * GET /api/map/overview                   — all gems origin pins
+     * GET /api/map/locations                  — known Sri Lankan locations
+     * GET /api/map/:gemId/pins                — pin list for one gem
+     * GET /api/map/:gemId/route               — route coordinates for one gem
+     * GET /api/map/:gemId/stats               — route statistics for one gem
+     * GET /api/map/:gemId                     — full map data for one gem
+     */
+    private void registerJourneyMapRoutes() {
+        // IMPORTANT — static routes before dynamic /:gemId
+        get("/api/map/overview",
+                journeyMapHandler::getAllGemsMapOverview);
+        get("/api/map/locations",
+                journeyMapHandler::getKnownLocations);
+        get("/api/map/:gemId/pins",
+                journeyMapHandler::getJourneyPins);
+        get("/api/map/:gemId/route",
+                journeyMapHandler::getJourneyRoute);
+        get("/api/map/:gemId/stats",
+                journeyMapHandler::getJourneyStats);
+        get("/api/map/:gemId",
+                journeyMapHandler::getJourneyMapData);
+
+        System.out.println("  Registered: GET    /api/map/overview");
+        System.out.println("  Registered: GET    /api/map/locations");
+        System.out.println("  Registered: GET    /api/map/:gemId/pins");
+        System.out.println("  Registered: GET    /api/map/:gemId/route");
+        System.out.println("  Registered: GET    /api/map/:gemId/stats");
+        System.out.println("  Registered: GET    /api/map/:gemId");
+    }
+
+    // ---------------------------------------------------------
     // Error handlers
     // ---------------------------------------------------------
 
@@ -341,6 +546,9 @@ public class ApiRouter {
         System.out.println("  GET  http://localhost:4567/api/gems");
         System.out.println("  GET  http://localhost:4567/api/stats");
         System.out.println("  GET  http://localhost:4567/api/alerts/unresolved");
+        System.out.println("  GET  http://localhost:4567/api/audit");
+        System.out.println("  GET  http://localhost:4567/api/estimate/overview");
+        System.out.println("  GET  http://localhost:4567/api/map/overview");
         System.out.println();
     }
 }

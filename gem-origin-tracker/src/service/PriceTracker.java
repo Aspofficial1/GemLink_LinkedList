@@ -1,11 +1,9 @@
 package service;
 
-import model.GemLinkedList;
-import model.GemNode;
-import model.GemStage;
-
 import java.util.ArrayList;
 import java.util.List;
+import model.GemLinkedList;
+import model.GemNode;
 
 /**
  * PriceTracker is responsible for tracking and analysing the price

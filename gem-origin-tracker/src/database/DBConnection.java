@@ -6,14 +6,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.Map;
+import model.GemLinkedList;
 import model.GemNode;
 import model.GemStage;
-import model.GemLinkedList;
-
-import java.time.LocalDate;
 
 /**
  * DBConnection handles all communication between the Java application
@@ -132,8 +132,6 @@ public class DBConnection {
      * individually, since JDBC cannot run multiple statements at once.
      */
     private void initialiseSchema() {
-        // SQL statements are written directly here to avoid file I/O issues
-        // during early development. These mirror the schema.sql file exactly.
         String[] schemaStatements = {
 
             // gems table
@@ -194,12 +192,33 @@ public class DBConnection {
             "    is_active           INTEGER DEFAULT 1" +
             ")",
 
+            // gem_audit_log table — NEW for Audit Trail feature
+            // Append-only table — records are never updated or deleted
+            // Every change to any gem or stage is recorded here permanently
+            "CREATE TABLE IF NOT EXISTS gem_audit_log (" +
+            "    id            INTEGER PRIMARY KEY AUTOINCREMENT," +
+            "    gem_id        TEXT    NOT NULL," +
+            "    action        TEXT    NOT NULL," +
+            "    stage_number  INTEGER," +
+            "    stage_type    TEXT," +
+            "    field_changed TEXT," +
+            "    old_value     TEXT," +
+            "    new_value     TEXT," +
+            "    description   TEXT," +
+            "    changed_at    TEXT    NOT NULL" +
+            ")",
+
             // Indexes for faster queries
-            "CREATE INDEX IF NOT EXISTS idx_gem_stages_gem_id ON gem_stages(gem_id)",
-            "CREATE INDEX IF NOT EXISTS idx_gem_stages_order  ON gem_stages(gem_id, stage_order)",
-            "CREATE INDEX IF NOT EXISTS idx_gems_type         ON gems(gem_type)",
-            "CREATE INDEX IF NOT EXISTS idx_alerts_gem_id     ON gem_alerts(gem_id)",
-            "CREATE INDEX IF NOT EXISTS idx_alerts_resolved   ON gem_alerts(is_resolved)",
+            "CREATE INDEX IF NOT EXISTS idx_gem_stages_gem_id  ON gem_stages(gem_id)",
+            "CREATE INDEX IF NOT EXISTS idx_gem_stages_order   ON gem_stages(gem_id, stage_order)",
+            "CREATE INDEX IF NOT EXISTS idx_gems_type          ON gems(gem_type)",
+            "CREATE INDEX IF NOT EXISTS idx_alerts_gem_id      ON gem_alerts(gem_id)",
+            "CREATE INDEX IF NOT EXISTS idx_alerts_resolved    ON gem_alerts(is_resolved)",
+
+            // NEW indexes for audit log fast querying
+            "CREATE INDEX IF NOT EXISTS idx_audit_gem_id       ON gem_audit_log(gem_id)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_action       ON gem_audit_log(action)",
+            "CREATE INDEX IF NOT EXISTS idx_audit_changed_at   ON gem_audit_log(changed_at)",
 
             // Pre-populate mining locations only if table is empty
             "INSERT OR IGNORE INTO ceylon_mining_locations (district, village, mine_name) VALUES ('Ratnapura',  'Pelmadulla',  'Pelmadulla Mine')",
@@ -245,7 +264,6 @@ public class DBConnection {
      */
     public boolean saveGem(GemLinkedList list, String colorDesc,
                            String originMine, String district, String village) {
-        // The head node of the list holds the original mining information
         GemNode miningNode = list.getMiningNode();
         if (miningNode == null) {
             System.out.println("Cannot save gem: mining stage node is missing.");
@@ -278,7 +296,6 @@ public class DBConnection {
 
     /**
      * Updates the QR code file path for a gem after it has been generated.
-     * Called by QRCodeService after the QR code image is created.
      *
      * @param gemId       the gem whose QR code path needs updating
      * @param qrCodePath  the file path to the generated QR code image
@@ -300,10 +317,9 @@ public class DBConnection {
 
     /**
      * Updates the Ceylon verification status of a gem.
-     * Called by OriginVerifier after checking the mining location.
      *
      * @param gemId         the gem to update
-     * @param isCeylonGem   true if verified as Ceylon gem, false otherwise
+     * @param isCeylonGem   true if verified as Ceylon gem
      * @return true if updated successfully, false otherwise
      */
     public boolean updateCeylonStatus(String gemId, boolean isCeylonGem) {
@@ -322,8 +338,7 @@ public class DBConnection {
 
     /**
      * Deletes a gem and all its stages from the database.
-     * Because ON DELETE CASCADE is set in schema.sql, deleting
-     * the gem row automatically deletes all its stage rows too.
+     * ON DELETE CASCADE removes all related stages and alerts automatically.
      *
      * @param gemId the ID of the gem to delete
      * @return true if deleted successfully, false otherwise
@@ -344,7 +359,6 @@ public class DBConnection {
 
     /**
      * Checks whether a gem ID already exists in the database.
-     * Used before inserting a new gem to prevent duplicate entries.
      *
      * @param gemId the gem ID to check
      * @return true if the gem already exists, false otherwise
@@ -370,11 +384,6 @@ public class DBConnection {
 
     /**
      * Saves a single stage node to the gem_stages table.
-     * Called every time a new stage is added to the linked list,
-     * so the database stays in sync with the in-memory list.
-     *
-     * The stage_order value is the node's position in the list,
-     * used to reconstruct the linked list correctly when loading.
      *
      * @param node       the GemNode to save
      * @param stageOrder the position of this node in the chain (1-based)
@@ -420,9 +429,6 @@ public class DBConnection {
      * Loads all stages for a given gem from the database and
      * reconstructs them into a GemLinkedList in the correct order.
      *
-     * Stages are loaded ordered by stage_order so the linked list
-     * is built from head (mining) to tail (current owner) correctly.
-     *
      * @param gemId the ID of the gem whose journey to load
      * @return a fully reconstructed GemLinkedList, or null if not found
      */
@@ -436,7 +442,6 @@ public class DBConnection {
             GemLinkedList list = new GemLinkedList(gemId);
 
             while (rs.next()) {
-                // Parse each row back into a GemNode object
                 GemStage  stage  = GemStage.valueOf(rs.getString("stage_type"));
                 LocalDate date   = LocalDate.parse(rs.getString("stage_date"));
 
@@ -451,25 +456,23 @@ public class DBConnection {
                     date
                 );
 
-                // Set optional fields only if they are not null in the database
-                if (rs.getString("person_id_number")  != null)
+                if (rs.getString("person_id_number")   != null)
                     node.setPersonIdNumber(rs.getString("person_id_number"));
-                if (rs.getString("contact_number")    != null)
+                if (rs.getString("contact_number")     != null)
                     node.setContactNumber(rs.getString("contact_number"));
                 if (rs.getString("certificate_number") != null)
                     node.setCertificateNumber(rs.getString("certificate_number"));
-                if (rs.getString("issuing_authority") != null)
+                if (rs.getString("issuing_authority")  != null)
                     node.setIssuingAuthority(rs.getString("issuing_authority"));
-                if (rs.getString("flight_number")     != null)
+                if (rs.getString("flight_number")      != null)
                     node.setFlightNumber(rs.getString("flight_number"));
-                if (rs.getString("invoice_number")    != null)
+                if (rs.getString("invoice_number")     != null)
                     node.setInvoiceNumber(rs.getString("invoice_number"));
                 if (rs.getString("destination_country") != null)
                     node.setDestinationCountry(rs.getString("destination_country"));
-                if (rs.getString("notes")             != null)
+                if (rs.getString("notes")              != null)
                     node.setNotes(rs.getString("notes"));
 
-                // Add each reconstructed node to the linked list
                 list.addStage(node);
             }
 
@@ -491,7 +494,6 @@ public class DBConnection {
 
     /**
      * Helper method to fetch the gem type from the gems table.
-     * Used during loadGemJourney to set the gem type on each node.
      *
      * @param gemId the gem ID to look up
      * @return the gem type string, or "Unknown" if not found
@@ -512,7 +514,6 @@ public class DBConnection {
 
     /**
      * Deletes all stages for a given gem from the gem_stages table.
-     * Used when a gem's journey needs to be fully reset and re-entered.
      *
      * @param gemId the ID of the gem whose stages to delete
      * @return true if deleted successfully, false otherwise
@@ -537,7 +538,6 @@ public class DBConnection {
 
     /**
      * Returns a list of all gem IDs stored in the database.
-     * Used by the search and dashboard features to list all gems.
      *
      * @return a List of gem ID strings
      */
@@ -558,7 +558,6 @@ public class DBConnection {
 
     /**
      * Returns all gem IDs that match a specific gem type.
-     * Used when users search gems by type e.g. all Blue Sapphires.
      *
      * @param gemType the gem type to search for
      * @return a List of matching gem ID strings
@@ -581,7 +580,6 @@ public class DBConnection {
 
     /**
      * Returns all gem IDs that originated from a specific district.
-     * Used when verifying or listing gems from a particular mining area.
      *
      * @param district the district name to search for
      * @return a List of matching gem ID strings
@@ -604,7 +602,6 @@ public class DBConnection {
 
     /**
      * Returns all gem IDs that are verified as genuine Ceylon gems.
-     * Used in the dashboard to show the count of authentic gems.
      *
      * @return a List of gem IDs where is_ceylon_gem = 1
      */
@@ -629,7 +626,6 @@ public class DBConnection {
 
     /**
      * Saves a fraud alert to the gem_alerts table.
-     * Called by OriginVerifier when a gem's origin cannot be verified.
      *
      * @param gemId        the gem that triggered the alert
      * @param alertType    the type of alert e.g. ORIGIN_MISMATCH
@@ -655,7 +651,6 @@ public class DBConnection {
 
     /**
      * Returns all unresolved alerts from the gem_alerts table.
-     * Used by the dashboard to warn users of pending fraud alerts.
      *
      * @return a List of alert messages that are not yet resolved
      */
@@ -666,7 +661,7 @@ public class DBConnection {
         try (Statement stmt = connection.createStatement();
              ResultSet rs   = stmt.executeQuery(sql)) {
             while (rs.next()) {
-                String entry = "Gem: "    + rs.getString("gem_id")
+                String entry = "Gem: "        + rs.getString("gem_id")
                              + " | Type: "    + rs.getString("alert_type")
                              + " | Message: " + rs.getString("alert_message")
                              + " | Date: "    + rs.getString("created_at");
@@ -681,7 +676,6 @@ public class DBConnection {
 
     /**
      * Marks a specific alert as resolved in the database.
-     * Called when an administrator reviews and clears an alert.
      *
      * @param alertId the ID of the alert to resolve
      * @return true if updated successfully, false otherwise
@@ -706,7 +700,6 @@ public class DBConnection {
 
     /**
      * Returns all active Ceylon mining location districts.
-     * Used by OriginVerifier to validate a gem's claimed origin.
      *
      * @return a List of district name strings
      */
@@ -727,7 +720,6 @@ public class DBConnection {
 
     /**
      * Returns all active Ceylon mining villages.
-     * Used by OriginVerifier for more precise origin matching.
      *
      * @return a List of village name strings
      */
@@ -753,7 +745,6 @@ public class DBConnection {
 
     /**
      * Returns the total number of gems registered in the system.
-     * Used in the statistics dashboard.
      *
      * @return total gem count as an integer
      */
@@ -770,7 +761,6 @@ public class DBConnection {
 
     /**
      * Returns the total number of verified Ceylon gems.
-     * Used in the statistics dashboard.
      *
      * @return count of gems where is_ceylon_gem = 1
      */
@@ -787,7 +777,6 @@ public class DBConnection {
 
     /**
      * Returns the total number of unresolved fraud alerts.
-     * Used in the statistics dashboard to highlight pending issues.
      *
      * @return count of unresolved alerts
      */
@@ -803,6 +792,171 @@ public class DBConnection {
     }
 
     // ---------------------------------------------------------
+    // Audit log operations — NEW for Audit Trail feature
+    // ---------------------------------------------------------
+
+    /**
+     * Executes a raw SQL statement with no parameters.
+     * Used by AuditService to create the gem_audit_log table
+     * if it does not already exist.
+     *
+     * @param sql the SQL statement to execute
+     */
+    public void executeRaw(String sql) {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(sql);
+        } catch (SQLException e) {
+            System.out.println("Failed to execute raw SQL.");
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Inserts a single audit log entry into the gem_audit_log table.
+     * Called by AuditService.insertLog() every time a change is recorded.
+     * The table is append-only — records are never updated or deleted.
+     *
+     * @param sql          the INSERT SQL string with ? placeholders
+     * @param gemId        the gem ID being audited
+     * @param action       the action type constant
+     * @param stageNumber  the stage number affected or null
+     * @param stageType    the stage type affected or null
+     * @param fieldChanged the field name that changed or null
+     * @param oldValue     the value before the change or null
+     * @param newValue     the value after the change or null
+     * @param description  human readable description of the change
+     * @param changedAt    the formatted timestamp string
+     */
+    public void insertAuditLog(String sql,
+                                String gemId,
+                                String action,
+                                Integer stageNumber,
+                                String stageType,
+                                String fieldChanged,
+                                String oldValue,
+                                String newValue,
+                                String description,
+                                String changedAt) {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, gemId);
+            ps.setString(2, action);
+
+            // stageNumber is nullable — use setNull if not provided
+            if (stageNumber != null) ps.setInt(3, stageNumber);
+            else                     ps.setNull(3, java.sql.Types.INTEGER);
+
+            ps.setString(4, stageType);
+            ps.setString(5, fieldChanged);
+            ps.setString(6, oldValue);
+            ps.setString(7, newValue);
+            ps.setString(8, description);
+            ps.setString(9, changedAt);
+
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            System.out.println("Failed to insert audit log for gem: " + gemId);
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Queries the gem_audit_log table with a single optional parameter.
+     * Used by AuditService to retrieve logs filtered by gem ID or action.
+     *
+     * If param is null, the SQL is executed without any WHERE parameter
+     * binding — used for queries that return all rows.
+     *
+     * Each row is returned as a Map of column name to value.
+     *
+     * @param sql   the SELECT SQL with optional single ? placeholder
+     * @param param the parameter value to bind, or null for no parameter
+     * @return a List of row maps each containing all audit log columns
+     */
+    public List<Map<String, Object>> queryAuditLogs(String sql, String param) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            if (param != null) {
+                ps.setString(1, param);
+            }
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id",           rs.getInt("id"));
+                row.put("gem_id",       rs.getString("gem_id"));
+                row.put("action",       rs.getString("action"));
+                row.put("stage_number", rs.getObject("stage_number")); // nullable
+                row.put("stage_type",   rs.getString("stage_type"));
+                row.put("field_changed",rs.getString("field_changed"));
+                row.put("old_value",    rs.getString("old_value"));
+                row.put("new_value",    rs.getString("new_value"));
+                row.put("description",  rs.getString("description"));
+                row.put("changed_at",   rs.getString("changed_at"));
+                results.add(row);
+            }
+
+            rs.close();
+            ps.close();
+
+        } catch (SQLException e) {
+            System.out.println("Failed to query audit logs.");
+            e.printStackTrace();
+        }
+
+        return results;
+    }
+
+    /**
+     * Queries the gem_audit_log table with two parameters.
+     * Used by AuditService.getAuditLogsForGemByAction() which needs
+     * to filter by both gem ID and action type simultaneously.
+     *
+     * Each row is returned as a Map of column name to value.
+     *
+     * @param sql    the SELECT SQL with two ? placeholders
+     * @param gemId  the gem ID to filter by
+     * @param action the action type to filter by
+     * @return a List of row maps each containing all audit log columns
+     */
+    public List<Map<String, Object>> queryAuditLogsFiltered(String sql,
+                                                              String gemId,
+                                                              String action) {
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, gemId);
+            ps.setString(2, action);
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id",           rs.getInt("id"));
+                row.put("gem_id",       rs.getString("gem_id"));
+                row.put("action",       rs.getString("action"));
+                row.put("stage_number", rs.getObject("stage_number"));
+                row.put("stage_type",   rs.getString("stage_type"));
+                row.put("field_changed",rs.getString("field_changed"));
+                row.put("old_value",    rs.getString("old_value"));
+                row.put("new_value",    rs.getString("new_value"));
+                row.put("description",  rs.getString("description"));
+                row.put("changed_at",   rs.getString("changed_at"));
+                results.add(row);
+            }
+
+        } catch (SQLException e) {
+            System.out.println("Failed to query filtered audit logs.");
+            e.printStackTrace();
+        }
+
+        return results;
+    }
+
+    // ---------------------------------------------------------
     // Connection management
     // ---------------------------------------------------------
 
@@ -810,8 +964,6 @@ public class DBConnection {
      * Closes the database connection when the application exits.
      * Should be called in the main method's finally block or
      * when the application window is closed.
-     *
-     * Not closing the connection can cause data corruption in SQLite.
      */
     public void closeConnection() {
         try {

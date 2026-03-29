@@ -5,6 +5,7 @@ import database.DBConnection;
 import model.GemLinkedList;
 import model.GemNode;
 import model.GemStage;
+import service.AuditService;
 import service.OriginVerifier;
 import service.TrackingService;
 
@@ -34,6 +35,9 @@ import java.util.Map;
  *
  * No business logic lives here — it all stays in TrackingService.
  * This separation keeps the API layer thin and testable.
+ *
+ * NEW — registerGem() now logs to audit trail after registering.
+ * NEW — deleteGem() now logs to audit trail before deleting.
  */
 public class GemHandler {
 
@@ -54,6 +58,12 @@ public class GemHandler {
     private OriginVerifier originVerifier;
 
     /**
+     * The AuditService records every gem registration and deletion
+     * to the audit log so the complete change history is preserved.
+     */
+    private AuditService auditService;
+
+    /**
      * The date format expected in all request bodies.
      * The frontend must send dates in this exact format.
      */
@@ -68,11 +78,14 @@ public class GemHandler {
      *
      * @param trackingService the service for all gem operations
      * @param originVerifier  the service for verification status
+     * @param auditService    the service for recording audit log entries
      */
     public GemHandler(TrackingService trackingService,
-                      OriginVerifier originVerifier) {
+                      OriginVerifier originVerifier,
+                      AuditService auditService) {
         this.trackingService = trackingService;
         this.originVerifier  = originVerifier;
+        this.auditService    = auditService;
     }
 
     // ---------------------------------------------------------
@@ -315,6 +328,8 @@ public class GemHandler {
      *
      * All fields except village are required.
      * Returns the new gem ID in the response data.
+     * After successful registration records the event to the audit log
+     * so the gem creation is permanently preserved in the change history.
      *
      * @param request  the incoming HTTP request with JSON body
      * @param response the outgoing HTTP response
@@ -342,17 +357,17 @@ public class GemHandler {
             }
 
             // Extract fields from the parsed JSON map
-            String gemType          = getString(data, "gemType");
-            String colorDescription = getString(data, "colorDescription");
-            String originMine       = getString(data, "originMine");
-            String district         = getString(data, "district");
-            String village          = getStringOrDefault(data, "village", "");
-            String minerName        = getString(data, "minerName");
-            String minerIdNumber    = getString(data, "minerIdNumber");
-            String minerContact     = getString(data, "minerContact");
-            double weightInCarats   = getDouble(data, "weightInCarats");
-            double priceInRupees    = getDouble(data, "priceInRupees");
-            LocalDate miningDate    = parseDate(getString(data, "miningDate"));
+            String    gemType          = getString(data, "gemType");
+            String    colorDescription = getString(data, "colorDescription");
+            String    originMine       = getString(data, "originMine");
+            String    district         = getString(data, "district");
+            String    village          = getStringOrDefault(data, "village", "");
+            String    minerName        = getString(data, "minerName");
+            String    minerIdNumber    = getString(data, "minerIdNumber");
+            String    minerContact     = getString(data, "minerContact");
+            double    weightInCarats   = getDouble(data, "weightInCarats");
+            double    priceInRupees    = getDouble(data, "priceInRupees");
+            LocalDate miningDate       = parseDate(getString(data, "miningDate"));
 
             if (miningDate == null) {
                 response.status(400);
@@ -375,6 +390,15 @@ public class GemHandler {
                         "Gem registration failed. Please try again."
                 ).toJson();
             }
+
+            // Record gem registration in audit log
+            auditService.logGemRegistered(
+                    String.valueOf(newList.getGemId()),
+                    gemType,
+                    originMine + ", " + district,
+                    weightInCarats,
+                    minerName
+            );
 
             // Build the response with the new gem data
             // gemId is explicitly stored as String to prevent
@@ -408,6 +432,10 @@ public class GemHandler {
      * This operation is irreversible and removes all database records.
      * The frontend confirms with the user before calling this endpoint.
      *
+     * Before deleting, captures the gem type and stage count and
+     * writes them to the audit log so the deletion is permanently
+     * recorded in the change history with old values preserved.
+     *
      * @param request  the incoming HTTP request with :id path parameter
      * @param response the outgoing HTTP response
      * @return a JSON string confirming deletion or reporting an error
@@ -428,6 +456,15 @@ public class GemHandler {
                 return ApiResponse.notFound("Gem", gemId).toJson();
             }
 
+            // Capture gem data BEFORE deleting for audit log
+            GemNode miningNode = list.getMiningNode();
+            String  gemType    = miningNode != null
+                    ? miningNode.getGemType() : "Unknown";
+            int     stageCount = list.getSize();
+
+            // Log deletion BEFORE it happens so old data is captured
+            auditService.logGemDeleted(gemId.trim(), gemType, stageCount);
+
             boolean deleted = trackingService.deleteGem(gemId.trim());
 
             if (!deleted) {
@@ -437,9 +474,16 @@ public class GemHandler {
                 ).toJson();
             }
 
+            // Return what was deleted in the response
+            Map<String, Object> result = new HashMap<>();
+            result.put("gemId",         gemId.trim());
+            result.put("gemType",       gemType);
+            result.put("stagesDeleted", stageCount);
+
             response.status(200);
             return ApiResponse.success(
-                    "Gem deleted successfully: " + gemId
+                    "Gem deleted successfully: " + gemId,
+                    result
             ).toJson();
 
         } catch (Exception e) {
@@ -553,21 +597,21 @@ public class GemHandler {
 
             // Add optional fields only if they are set
             if (node.getPersonIdNumber() != null)
-                stageMap.put("personIdNumber",   node.getPersonIdNumber());
+                stageMap.put("personIdNumber",    node.getPersonIdNumber());
             if (node.getContactNumber() != null)
-                stageMap.put("contactNumber",    node.getContactNumber());
+                stageMap.put("contactNumber",     node.getContactNumber());
             if (node.getCertificateNumber() != null)
-                stageMap.put("certificateNumber",node.getCertificateNumber());
+                stageMap.put("certificateNumber", node.getCertificateNumber());
             if (node.getIssuingAuthority() != null)
-                stageMap.put("issuingAuthority", node.getIssuingAuthority());
+                stageMap.put("issuingAuthority",  node.getIssuingAuthority());
             if (node.getFlightNumber() != null)
-                stageMap.put("flightNumber",     node.getFlightNumber());
+                stageMap.put("flightNumber",      node.getFlightNumber());
             if (node.getInvoiceNumber() != null)
-                stageMap.put("invoiceNumber",    node.getInvoiceNumber());
+                stageMap.put("invoiceNumber",     node.getInvoiceNumber());
             if (node.getDestinationCountry() != null)
                 stageMap.put("destinationCountry", node.getDestinationCountry());
             if (node.getNotes() != null)
-                stageMap.put("notes", node.getNotes());
+                stageMap.put("notes",             node.getNotes());
 
             // Calculate price increase from previous stage
             if (i > 0) {
